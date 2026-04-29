@@ -159,11 +159,9 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
   }, [classId, loadClassData]);
 
   useEffect(() => {
-    if (classId && Object.keys(questions).length >= 0) {
-      loadActiveRun(classId);
-    }
+    if (classId) loadActiveRun(classId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classId, locations.length]);
+  }, [classId, locations.length, Object.keys(questions).length, user?.id]);
 
   const startRun = async () => {
     if (!user || !classId) return;
