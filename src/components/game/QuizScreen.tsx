@@ -6,7 +6,7 @@ import { vibrate } from "@/game/sound";
 import { cn } from "@/lib/utils";
 
 export const QuizScreen = () => {
-  const { go, currentLocationId, locations, questions, recordAnswers, finishRun } = useGame();
+  const { go, currentLocationId, locations, questions, recordAnswers, finishRun, completedLocationIds } = useGame();
   const loc = locations.find((l) => l.id === currentLocationId);
   // Only 1 question per location.
   const qs = useMemo(() => (loc ? (questions[loc.id] ?? []).slice(0, 1) : []), [loc, questions]);
