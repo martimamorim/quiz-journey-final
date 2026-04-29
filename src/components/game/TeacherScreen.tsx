@@ -183,7 +183,7 @@ export const TeacherScreen = () => {
               <MapPin className="h-4 w-4 text-primary" /> Locais — {activeClass.name}
             </h3>
             <p className="text-xs text-muted-foreground mb-3">
-              Toca no mapa onde está cada QR code para o adicionar.
+              Toca no mapa onde está cada QR code para o adicionar. Máximo de 5 locais ({locs.length}/5).
             </p>
             <div className="rounded-2xl overflow-hidden border border-border h-[40vh] min-h-[280px]">
               <MapContainer center={locs[0] ? [locs[0].lat, locs[0].lng] : DEFAULT_CENTER} zoom={18} className="h-full w-full" scrollWheelZoom>
