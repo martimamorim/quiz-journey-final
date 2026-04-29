@@ -90,6 +90,10 @@ export const TeacherScreen = () => {
 
   const addLocationAt = async (lat: number, lng: number) => {
     if (!classId) return;
+    if (locs.length >= 5) {
+      toast.error("Máximo de 5 locais por turma");
+      return;
+    }
     const order = locs.length;
     const qr = `TH-${classId.slice(0, 6)}-${order + 1}`;
     const { data, error } = await supabase
