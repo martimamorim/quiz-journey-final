@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode, Html5QrcodeScannerState } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 import { useGame } from "@/game/GameContext";
-import { ArrowLeft, QrCode, AlertCircle } from "lucide-react";
+import { ArrowLeft, QrCode, AlertCircle, Sparkles } from "lucide-react";
 import { playScan, vibrate } from "@/game/sound";
 import { toast } from "sonner";
 
@@ -10,39 +10,51 @@ export const ScannerScreen = () => {
   const { go, currentLocationId, locations } = useGame();
   const containerId = "qr-reader";
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const stoppedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
   const target = locations.find((l) => l.id === currentLocationId);
 
+  const stopScanner = async () => {
+    const s = scannerRef.current;
+    if (!s) return;
+    try {
+      const state = s.getState();
+      if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+        await s.stop();
+      }
+      try { s.clear(); } catch { /* noop */ }
+    } catch { /* noop */ }
+    scannerRef.current = null;
+  };
+
   useEffect(() => {
-    if (!target) { setStarting(false); return; }
-    let stopped = false;
+    if (!target) {
+      setStarting(false);
+      return;
+    }
+    stoppedRef.current = false;
 
     const start = async () => {
       try {
-        const html5Qr = new Html5Qrcode(containerId);
+        const html5Qr = new Html5Qrcode(containerId, /* verbose */ false);
         scannerRef.current = html5Qr;
         await html5Qr.start(
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 240, height: 240 } },
           (decoded) => {
-            if (stopped) return;
-            playScan();
-            vibrate(80);
-            if (target && decoded.trim() === target.qr_code) {
-              stopped = true;
-              try {
-                const st = html5Qr.getState();
-                if (st === Html5QrcodeScannerState.SCANNING || st === Html5QrcodeScannerState.PAUSED) {
-                  html5Qr.stop().then(() => html5Qr.clear()).catch(() => {});
-                }
-              } catch {}
-              go("quiz");
+            if (stoppedRef.current) return;
+            const value = decoded.trim();
+            if (target && value === target.qr_code) {
+              stoppedRef.current = true;
+              playScan();
+              vibrate(80);
+              stopScanner().finally(() => go("quiz"));
             } else {
               toast.error("QR errado", { description: "Este não é o código deste local." });
             }
           },
-          () => {},
+          () => { /* per-frame errors silenced */ },
         );
         setStarting(false);
       } catch {
@@ -53,16 +65,8 @@ export const ScannerScreen = () => {
     start();
 
     return () => {
-      stopped = true;
-      const s = scannerRef.current;
-      if (s) {
-        try {
-          const state = s.getState();
-          if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
-            s.stop().then(() => s.clear()).catch(() => {});
-          } else { try { s.clear(); } catch {} }
-        } catch {}
-      }
+      stoppedRef.current = true;
+      stopScanner();
     };
   }, [currentLocationId, go, target]);
 
@@ -71,9 +75,10 @@ export const ScannerScreen = () => {
       toast.error("Sem local ativo", { description: "Volta ao mapa." });
       return;
     }
+    stoppedRef.current = true;
     playScan();
     vibrate(80);
-    go("quiz");
+    stopScanner().finally(() => go("quiz"));
   };
 
   return (
@@ -82,9 +87,9 @@ export const ScannerScreen = () => {
         <Button variant="ghost" size="icon" onClick={() => go("map")} className="rounded-full">
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div>
+        <div className="min-w-0">
           <div className="text-xs text-muted-foreground uppercase tracking-wider">A procurar</div>
-          <div className="font-bold">{target?.name ?? "Sem local"}</div>
+          <div className="font-bold truncate">{target?.name ?? "Sem local ativo"}</div>
         </div>
       </div>
 
@@ -98,12 +103,18 @@ export const ScannerScreen = () => {
             <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-primary rounded-br-2xl" />
           </div>
         </div>
-        {starting && !error && (
+        {!target && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/80 gap-2">
+            <AlertCircle className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Não tens nenhum local ativo. Volta ao mapa.</p>
+          </div>
+        )}
+        {target && starting && !error && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground bg-black/60">
             A iniciar câmara…
           </div>
         )}
-        {error && (
+        {target && error && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/80 gap-3">
             <AlertCircle className="h-8 w-8 text-destructive" />
             <p className="text-sm text-muted-foreground">{error}</p>
@@ -115,8 +126,13 @@ export const ScannerScreen = () => {
         <QrCode className="h-4 w-4" /> Aponta a câmara ao QR code do local
       </p>
 
-      <Button variant="outline" onClick={simulateScan} className="mt-4 rounded-full border-primary/40 text-primary">
-        Simular leitura (demo)
+      <Button
+        variant="outline"
+        onClick={simulateScan}
+        disabled={!target}
+        className="mt-4 rounded-full border-primary/40 text-primary"
+      >
+        <Sparkles className="h-4 w-4 mr-2" /> Simular leitura (demo)
       </Button>
     </div>
   );
