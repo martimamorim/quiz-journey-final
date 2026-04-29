@@ -7,7 +7,7 @@ import { useGeolocation } from "@/game/useGeolocation";
 import { ProgressBar } from "./ProgressBar";
 import { Crosshair, Loader2, MapPin, QrCode, AlertTriangle, Trophy } from "lucide-react";
 
-const DEFAULT_CENTER: [number, number] = [41.3736, -8.2956]; // Vizela, Portugal
+const DEFAULT_CENTER: [number, number] = [41.3424, -8.4731]; // Escola Profissional Oficina - Santo Tirso
 
 const makeIcon = (html: string) =>
   L.divIcon({ className: "th-marker", html, iconSize: [36, 36], iconAnchor: [18, 18] });
