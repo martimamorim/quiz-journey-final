@@ -163,8 +163,16 @@ export const TeacherScreen = () => {
                     <span className="font-mono">{c.join_code}</span> <Copy className="h-3 w-3" />
                   </button>
                 </div>
-                <Button size="sm" variant={c.id === classId ? "default" : "outline"} onClick={() => setActiveClass(c.id)} className="rounded-full">
-                  {c.id === classId ? "Ativa" : "Editar"}
+                <Button
+                  size="sm"
+                  variant={c.id === classId ? "default" : "outline"}
+                  onClick={async () => {
+                    await setActiveClass(c.id);
+                    toast.success(`Turma "${c.name}" ativada`);
+                  }}
+                  className="rounded-full"
+                >
+                  {c.id === classId ? "Ativa ✓" : "Ativar"}
                 </Button>
                 <Button size="icon" variant="ghost" onClick={() => deleteClass(c.id)} className="rounded-full text-destructive">
                   <Trash2 className="h-4 w-4" />
