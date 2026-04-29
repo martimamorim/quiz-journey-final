@@ -157,26 +157,73 @@ const TeacherForm = () => {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const cleanEmail = (v: string) => v.trim().toLowerCase();
+
+  const resendConfirmation = async (addr: string) => {
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: addr,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    if (error) toast.error("Não foi possível reenviar", { description: error.message });
+    else toast.success("Email de confirmação reenviado");
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const addr = cleanEmail(email);
+    if (!addr || !password) {
+      toast.error("Preenche o email e a password");
+      return;
+    }
     setBusy(true);
     if (mode === "signup") {
       const { error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: addr,
         password,
         options: {
           emailRedirectTo: window.location.origin,
-          data: { display_name: name.trim() || email.split("@")[0], role: "teacher" },
+          data: { display_name: name.trim() || addr.split("@")[0], role: "teacher" },
         },
       });
+      if (error) {
+        setBusy(false);
+        if (error.message.toLowerCase().includes("registered")) {
+          toast.error("Já existe uma conta com este email", {
+            description: "Muda para 'Entrar' e usa a tua password.",
+          });
+        } else {
+          toast.error("Não foi possível registar", { description: error.message });
+        }
+        return;
+      }
+      // Try to sign in immediately (auto-confirm is on).
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email: addr, password });
       setBusy(false);
-      if (error) return toast.error("Não foi possível registar", { description: error.message });
-      toast.success("Conta criada. Já podes entrar!");
-      setMode("login");
+      if (signInErr) {
+        toast.success("Conta criada. Já podes entrar!");
+        setMode("login");
+      } else {
+        toast.success("Bem-vindo!");
+      }
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const { error } = await supabase.auth.signInWithPassword({ email: addr, password });
       setBusy(false);
-      if (error) return toast.error("Credenciais inválidas", { description: error.message });
+      if (error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes("not confirmed")) {
+          toast.error("Email ainda não confirmado", {
+            description: "Clica para reenviar o email de confirmação.",
+            action: { label: "Reenviar", onClick: () => resendConfirmation(addr) },
+          });
+        } else if (msg.includes("invalid")) {
+          toast.error("Email ou password incorretos", {
+            description: "Verifica os dados ou regista-te se ainda não tens conta.",
+          });
+        } else {
+          toast.error("Não foi possível entrar", { description: error.message });
+        }
+      }
     }
   };
 
@@ -199,10 +246,13 @@ const TeacherForm = () => {
         <Input
           id="t-email"
           type="email"
+          autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="prof@escola.pt"
-          className="h-12 rounded-2xl"
+          className="h-12 rounded-2xl lowercase"
           required
         />
       </div>
@@ -211,6 +261,7 @@ const TeacherForm = () => {
         <Input
           id="t-pass"
           type="password"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
