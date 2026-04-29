@@ -45,11 +45,8 @@ export const MapScreen = () => {
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
 
-  const center = useMemo<[number, number]>(() => {
-    if (position) return [position.lat, position.lng];
-    if (locations[0]) return [locations[0].lat, locations[0].lng];
-    return DEFAULT_CENTER;
-  }, [position, locations]);
+  // Sempre arrancar centrado em Vizela; o auto-follow move depois para o GPS.
+  const center = DEFAULT_CENTER;
 
   useEffect(() => {
     if (!mapInstance || !position || !autoFollow) return;
