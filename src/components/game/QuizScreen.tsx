@@ -6,7 +6,7 @@ import { vibrate } from "@/game/sound";
 import { cn } from "@/lib/utils";
 
 export const QuizScreen = () => {
-  const { go, currentLocationId, locations, questions, recordAnswers, finishRun } = useGame();
+  const { go, currentLocationId, locations, questions, recordAnswers, finishRun, completedLocationIds } = useGame();
   const loc = locations.find((l) => l.id === currentLocationId);
   // Only 1 question per location.
   const qs = useMemo(() => (loc ? (questions[loc.id] ?? []).slice(0, 1) : []), [loc, questions]);
@@ -15,10 +15,16 @@ export const QuizScreen = () => {
   const [submitting, setSubmitting] = useState(false);
 
   if (!loc) {
+    const allDone = locations.length > 0 && completedLocationIds.length >= locations.length;
     return (
-      <div className="min-h-screen p-5 flex flex-col items-center justify-center">
-        <p className="text-muted-foreground">Sem local ativo.</p>
-        <Button onClick={() => go("map")} className="mt-4 rounded-full">Voltar</Button>
+      <div className="min-h-screen p-5 flex flex-col items-center justify-center text-center gap-3 animate-fade-in">
+        <Brain className="h-10 w-10 text-primary" />
+        <p className="text-muted-foreground">
+          {allDone ? "Já completaste todos os locais." : "Sem local ativo."}
+        </p>
+        <Button onClick={() => go(allDone ? "final" : "map")} className="rounded-full">
+          {allDone ? "Ver resultado" : "Voltar ao mapa"}
+        </Button>
       </div>
     );
   }

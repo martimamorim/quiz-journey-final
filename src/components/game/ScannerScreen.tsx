@@ -15,6 +15,7 @@ export const ScannerScreen = () => {
   const target = locations.find((l) => l.id === currentLocationId);
 
   useEffect(() => {
+    if (!target) { setStarting(false); return; }
     let stopped = false;
 
     const start = async () => {
@@ -65,7 +66,15 @@ export const ScannerScreen = () => {
     };
   }, [currentLocationId, go, target]);
 
-  const simulateScan = () => { playScan(); vibrate(80); go("quiz"); };
+  const simulateScan = () => {
+    if (!target) {
+      toast.error("Sem local ativo", { description: "Volta ao mapa." });
+      return;
+    }
+    playScan();
+    vibrate(80);
+    go("quiz");
+  };
 
   return (
     <div className="min-h-screen flex flex-col p-5 pb-32 animate-fade-in">
