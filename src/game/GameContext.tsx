@@ -37,27 +37,35 @@ export type DBQuestion = {
 
 export type DBClass = { id: string; teacher_id: string; name: string; join_code: string };
 
+export type RunSummary = {
+  correctCount: number;
+  wrongCount: number;
+  totalQuestions: number;
+  durationSeconds: number;
+};
+
 type GameState = {
   screen: Screen;
   classId: string | null;
   locations: DBLocation[];
-  questions: Record<string, DBQuestion[]>; // by location_id
+  questions: Record<string, DBQuestion[]>;
   completedLocationIds: string[];
   currentLocationId: string | null;
   runId: string | null;
   totalPoints: number;
   loading: boolean;
+  summary: RunSummary | null;
 };
 
 type GameCtx = GameState & {
   go: (s: Screen) => void;
   setActiveClass: (id: string) => Promise<void>;
   startRun: () => Promise<void>;
-  finishRun: () => Promise<void>;
+  finishRun: () => Promise<RunSummary | null>;
   recordAnswers: (
     locationId: string,
     answers: { question_id: string; selected_index: number }[],
-  ) => Promise<{ correctCount: number; pointsEarned: number }>;
+  ) => Promise<void>;
   resetProgress: () => Promise<void>;
   reload: () => Promise<void>;
 };
@@ -66,7 +74,7 @@ const Ctx = createContext<GameCtx | null>(null);
 const ACTIVE_CLASS_KEY = "th-active-class";
 
 export const GameProvider = ({ children }: { children: ReactNode }) => {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const [screen, setScreen] = useState<Screen>("home");
   const [classId, setClassId] = useState<string | null>(() => localStorage.getItem(ACTIVE_CLASS_KEY));
   const [locations, setLocations] = useState<DBLocation[]>([]);
@@ -75,6 +83,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
   const [runId, setRunId] = useState<string | null>(null);
   const [totalPoints, setTotalPoints] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState<RunSummary | null>(null);
 
   const go = (s: Screen) => setScreen(s);
 
@@ -85,7 +94,8 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
       .select("*")
       .eq("class_id", cId)
       .order("order_index", { ascending: true });
-    const list = (locs ?? []) as DBLocation[];
+    // Hard cap at 5 locations on the client too.
+    const list = ((locs ?? []) as DBLocation[]).slice(0, 5);
     setLocations(list);
 
     if (list.length > 0) {
@@ -98,7 +108,8 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
       (qs ?? []).forEach((q: any) => {
         const opts = Array.isArray(q.options) ? q.options : JSON.parse(q.options ?? "[]");
         const item = { ...q, options: opts } as DBQuestion;
-        (grouped[q.location_id] ||= []).push(item);
+        // Only keep the first question per location.
+        if (!grouped[q.location_id]) grouped[q.location_id] = [item];
       });
       setQuestions(grouped);
     } else {
@@ -109,7 +120,6 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
 
   const loadActiveRun = useCallback(async (cId: string) => {
     if (!user) return;
-    // Find an unfinished run for this class
     const { data: runs } = await supabase
       .from("runs")
       .select("id, total_points, finished_at")
@@ -123,9 +133,8 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
       setTotalPoints(active.total_points ?? 0);
       const { data: ans } = await supabase
         .from("answers")
-        .select("question_id, is_correct, run_id")
+        .select("question_id")
         .eq("run_id", active.id);
-      // a location is completed when all its questions have at least one answer in this run
       const answeredQs = new Set((ans ?? []).map((a) => a.question_id));
       const done: string[] = [];
       Object.entries(questions).forEach(([locId, qs]) => {
@@ -145,12 +154,10 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     await loadClassData(id);
   };
 
-  // Load class data when class changes
   useEffect(() => {
     if (classId) loadClassData(classId);
   }, [classId, loadClassData]);
 
-  // Load run when class data is ready
   useEffect(() => {
     if (classId && Object.keys(questions).length >= 0) {
       loadActiveRun(classId);
@@ -172,13 +179,15 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     setRunId(data.id);
     setTotalPoints(0);
     setCompletedLocationIds([]);
+    setSummary(null);
   };
 
+  // SILENT recording: no toast, no immediate feedback to the student.
   const recordAnswers = async (
     locationId: string,
     answers: { question_id: string; selected_index: number }[],
   ) => {
-    if (!user || !classId) return { correctCount: 0, pointsEarned: 0 };
+    if (!user || !classId) return;
 
     let activeRunId = runId;
     if (!activeRunId) {
@@ -189,20 +198,18 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         .single();
       if (error || !data) {
         toast.error("Erro ao iniciar percurso");
-        return { correctCount: 0, pointsEarned: 0 };
+        return;
       }
       activeRunId = data.id;
       setRunId(activeRunId);
     }
 
     const locQs = questions[locationId] ?? [];
-    let correctCount = 0;
     let pointsEarned = 0;
     const rows = answers.map((a) => {
       const q = locQs.find((x) => x.id === a.question_id);
       const ok = !!q && q.correct_index === a.selected_index;
       const pts = ok ? q!.points : 0;
-      if (ok) correctCount++;
       pointsEarned += pts;
       return {
         run_id: activeRunId!,
@@ -220,23 +227,40 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     setCompletedLocationIds((prev) => Array.from(new Set([...prev, locationId])));
 
     await supabase.from("runs").update({ total_points: newTotal }).eq("id", activeRunId);
-    return { correctCount, pointsEarned };
   };
 
-  const finishRun = async () => {
-    if (!runId) return;
+  const finishRun = async (): Promise<RunSummary | null> => {
+    if (!runId) return null;
     const startedRow = await supabase.from("runs").select("started_at").eq("id", runId).single();
     const startedAt = startedRow.data?.started_at ? new Date(startedRow.data.started_at) : new Date();
     const duration = Math.max(1, Math.round((Date.now() - startedAt.getTime()) / 1000));
+
+    // Compute correct/wrong totals from saved answers.
+    const { data: ans } = await supabase
+      .from("answers")
+      .select("is_correct")
+      .eq("run_id", runId);
+    const totalAnswered = ans?.length ?? 0;
+    const correct = (ans ?? []).filter((a) => a.is_correct).length;
+    const wrong = totalAnswered - correct;
+
     await supabase
       .from("runs")
       .update({ finished_at: new Date().toISOString(), duration_seconds: duration })
       .eq("id", runId);
+
+    const result: RunSummary = {
+      correctCount: correct,
+      wrongCount: wrong,
+      totalQuestions: totalAnswered,
+      durationSeconds: duration,
+    };
+    setSummary(result);
+    return result;
   };
 
   const resetProgress = async () => {
     if (!user || !classId) return;
-    // delete unfinished runs to start fresh
     await supabase
       .from("runs")
       .delete()
@@ -246,6 +270,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     setRunId(null);
     setTotalPoints(0);
     setCompletedLocationIds([]);
+    setSummary(null);
     toast.success("Progresso reposto");
   };
 
@@ -256,7 +281,6 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Currently focused location: first incomplete in order
   const currentLocationId = useMemo(() => {
     const next = locations.find((l) => !completedLocationIds.includes(l.id));
     return next?.id ?? null;
@@ -274,6 +298,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         runId,
         totalPoints,
         loading,
+        summary,
         go,
         setActiveClass,
         startRun,
