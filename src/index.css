@@ -120,3 +120,14 @@ All colors MUST be HSL.
     min-height: 100vh;
   }
 }
+
+/* Keep Leaflet panes/controls below Radix dialogs (z-50) */
+.leaflet-pane,
+.leaflet-top,
+.leaflet-bottom,
+.leaflet-control {
+  z-index: 1 !important;
+}
+.leaflet-container {
+  z-index: 0;
+}
