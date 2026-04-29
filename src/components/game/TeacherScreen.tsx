@@ -238,7 +238,7 @@ const ClickToAdd = ({ onAdd }: { onAdd: (lat: number, lng: number) => void }) =>
   return null;
 };
 
-// ============ Location Editor (name, hint, QR + 5 questions) ============
+// ============ Location Editor (name, hint, QR + 1 question) ============
 type Q = {
   id?: string;
   text: string;
@@ -248,19 +248,19 @@ type Q = {
   order_index: number;
 };
 
-const blankQ = (i: number): Q => ({
+const blankQ = (): Q => ({
   text: "",
   options: ["", "", "", ""],
   correct_index: 0,
   points: 10,
-  order_index: i,
+  order_index: 0,
 });
 
 const LocationEditor = ({ location, onClose }: { location: LocRow; onClose: () => void }) => {
   const [name, setName] = useState(location.name);
   const [hint, setHint] = useState(location.hint ?? "");
   const [qrCode, setQrCode] = useState(location.qr_code);
-  const [questions, setQuestions] = useState<Q[]>([]);
+  const [question, setQuestion] = useState<Q>(blankQ());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -276,57 +276,63 @@ const LocationEditor = ({ location, onClose }: { location: LocRow; onClose: () =
         points: q.points,
         order_index: q.order_index,
       })) as Q[];
-      // Ensure 5 slots
-      const filled = [...existing];
-      while (filled.length < 5) filled.push(blankQ(filled.length));
-      setQuestions(filled.slice(0, 5));
+      // Only one question per location.
+      if (existing.length > 0) {
+        const first = existing[0];
+        // Pad options to 4 if needed.
+        const opts = [...first.options];
+        while (opts.length < 4) opts.push("");
+        setQuestion({ ...first, options: opts.slice(0, 4) });
+      } else {
+        setQuestion(blankQ());
+      }
       setLoading(false);
     })();
   }, [location.id]);
 
-  const updateQ = (i: number, patch: Partial<Q>) => {
-    setQuestions((prev) => prev.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
-  };
-
-  const updateOption = (qi: number, oi: number, val: string) => {
-    setQuestions((prev) => prev.map((q, idx) => idx === qi
-      ? { ...q, options: q.options.map((o, j) => (j === oi ? val : o)) }
-      : q));
-  };
+  const updateQ = (patch: Partial<Q>) => setQuestion((prev) => ({ ...prev, ...patch }));
+  const updateOption = (oi: number, val: string) =>
+    setQuestion((prev) => ({ ...prev, options: prev.options.map((o, j) => (j === oi ? val : o)) }));
 
   const save = async () => {
     setSaving(true);
-    // Update location
     const { error: locErr } = await supabase
       .from("locations").update({ name, hint, qr_code: qrCode }).eq("id", location.id);
     if (locErr) { setSaving(false); return toast.error(locErr.message); }
 
-    // Validate questions: only save filled-in ones
-    const valid = questions.filter((q) => q.text.trim() && q.options.every((o) => o.trim()));
-    // Delete removed ones
+    const isFilled = question.text.trim() && question.options.every((o) => o.trim());
+
+    // Find existing question(s) for this location.
     const { data: existing } = await supabase
       .from("questions").select("id").eq("location_id", location.id);
-    const validIds = new Set(valid.filter((q) => q.id).map((q) => q.id!));
-    const toDelete = (existing ?? []).filter((e: any) => !validIds.has(e.id)).map((e: any) => e.id);
-    if (toDelete.length > 0) await supabase.from("questions").delete().in("id", toDelete);
+    const existingIds = (existing ?? []).map((e: any) => e.id);
 
-    // Upsert
-    for (let i = 0; i < valid.length; i++) {
-      const q = valid[i];
+    if (!isFilled) {
+      // If user cleared the question, remove any existing one.
+      if (existingIds.length > 0) {
+        await supabase.from("questions").delete().in("id", existingIds);
+      }
+    } else {
+      // Delete extras (only one allowed).
+      const keepId = question.id && existingIds.includes(question.id) ? question.id : null;
+      const toDelete = existingIds.filter((id) => id !== keepId);
+      if (toDelete.length > 0) await supabase.from("questions").delete().in("id", toDelete);
+
       const payload: any = {
         location_id: location.id,
-        text: q.text.trim(),
-        options: q.options,
-        correct_index: q.correct_index,
-        points: q.points,
-        order_index: i,
+        text: question.text.trim(),
+        options: question.options,
+        correct_index: question.correct_index,
+        points: question.points,
+        order_index: 0,
       };
-      if (q.id) {
-        await supabase.from("questions").update(payload).eq("id", q.id);
+      if (keepId) {
+        await supabase.from("questions").update(payload).eq("id", keepId);
       } else {
         await supabase.from("questions").insert(payload);
       }
     }
+
     setSaving(false);
     toast.success("Local guardado");
     onClose();
@@ -357,46 +363,48 @@ const LocationEditor = ({ location, onClose }: { location: LocRow; onClose: () =
             </div>
 
             <div className="border-t border-border pt-4">
-              <h4 className="font-bold mb-2">5 Perguntas</h4>
-              <div className="space-y-4">
-                {questions.map((q, qi) => (
-                  <div key={qi} className="rounded-2xl border border-border p-3 space-y-2 bg-card/50">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-primary">Pergunta {qi + 1}</span>
-                      <Input
-                        type="number"
-                        value={q.points}
-                        onChange={(e) => updateQ(qi, { points: parseInt(e.target.value) || 0 })}
-                        className="w-20 h-8 text-xs"
-                        min={0}
-                      />
-                    </div>
-                    <Textarea
-                      value={q.text}
-                      onChange={(e) => updateQ(qi, { text: e.target.value })}
-                      placeholder="Texto da pergunta"
-                      rows={2}
+              <h4 className="font-bold mb-2">Pergunta deste local</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                Cada local tem apenas 1 pergunta.
+              </p>
+              <div className="rounded-2xl border border-border p-3 space-y-2 bg-card/50">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-primary">Pergunta</span>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs">Pontos</Label>
+                    <Input
+                      type="number"
+                      value={question.points}
+                      onChange={(e) => updateQ({ points: parseInt(e.target.value) || 0 })}
+                      className="w-20 h-8 text-xs"
+                      min={0}
                     />
-                    {q.options.map((opt, oi) => (
-                      <div key={oi} className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name={`q-${qi}-correct`}
-                          checked={q.correct_index === oi}
-                          onChange={() => updateQ(qi, { correct_index: oi })}
-                          className="accent-primary"
-                        />
-                        <Input
-                          value={opt}
-                          onChange={(e) => updateOption(qi, oi, e.target.value)}
-                          placeholder={`Opção ${oi + 1}`}
-                          className="h-9"
-                        />
-                      </div>
-                    ))}
-                    <p className="text-[10px] text-muted-foreground">Marca o círculo da resposta correta.</p>
+                  </div>
+                </div>
+                <Textarea
+                  value={question.text}
+                  onChange={(e) => updateQ({ text: e.target.value })}
+                  placeholder="Texto da pergunta"
+                  rows={2}
+                />
+                {question.options.map((opt, oi) => (
+                  <div key={oi} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="correct-option"
+                      checked={question.correct_index === oi}
+                      onChange={() => updateQ({ correct_index: oi })}
+                      className="accent-primary"
+                    />
+                    <Input
+                      value={opt}
+                      onChange={(e) => updateOption(oi, e.target.value)}
+                      placeholder={`Opção ${oi + 1}`}
+                      className="h-9"
+                    />
                   </div>
                 ))}
+                <p className="text-[10px] text-muted-foreground">Marca o círculo da resposta correta.</p>
               </div>
             </div>
           </div>
