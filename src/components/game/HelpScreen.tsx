@@ -6,7 +6,7 @@ import { HelpCircle, QrCode, MapPin, Brain, Trophy, Mail, ChevronRight, LogOut }
 const STEPS = [
   { icon: MapPin, title: "Vai até ao local", text: "Segue as pistas no mapa para encontrar cada ponto." },
   { icon: QrCode, title: "Digitaliza o QR", text: "Toca no botão central e aponta a câmara ao QR code." },
-  { icon: Brain, title: "Responde às 5 perguntas", text: "Cada acerto soma pontos. Termina o local para avançar." },
+  { icon: Brain, title: "Responde à pergunta", text: "Há 1 pergunta por local. O resultado só aparece no final." },
   { icon: Trophy, title: "Sobe no ranking", text: "Quanto mais rápido e mais pontos, melhor a tua posição." },
 ];
 
