@@ -1,19 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap, useMapEvents } from "react-leaflet";
 import { Button } from "@/components/ui/button";
 import { useGame } from "@/game/GameContext";
 import { useGeolocation } from "@/game/useGeolocation";
 import { ProgressBar } from "./ProgressBar";
-import { Crosshair, Loader2, MapPin, QrCode, AlertTriangle, Trophy } from "lucide-react";
+import { Crosshair, Loader2, MapPin, QrCode, AlertTriangle, Trophy, School } from "lucide-react";
 
-const DEFAULT_CENTER: [number, number] = [41.3424, -8.4731]; // Escola Profissional Oficina - Santo Tirso
+// Escola Profissional Oficina – Santo Tirso
+const SCHOOL: [number, number] = [41.3424, -8.4731];
 
-const makeIcon = (html: string) =>
-  L.divIcon({ className: "th-marker", html, iconSize: [36, 36], iconAnchor: [18, 18] });
+const makeIcon = (html: string, size = 36) =>
+  L.divIcon({ className: "th-marker", html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
 
 const userIcon = makeIcon(
   `<div style="width:22px;height:22px;border-radius:9999px;background:hsl(210 100% 56%);border:3px solid white;box-shadow:0 0 0 4px hsl(210 100% 56% / 0.35), 0 0 20px hsl(210 100% 56% / 0.7);"></div>`,
+);
+
+const schoolIcon = makeIcon(
+  `<div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9999px;background:hsl(45 100% 60%);border:3px solid white;box-shadow:0 4px 14px rgba(0,0,0,.5);color:hsl(222 47% 6%);font-weight:900;font-size:18px;">🏫</div>`,
 );
 
 const locIcon = (variant: "current" | "done" | "locked") => {
@@ -27,14 +32,33 @@ const locIcon = (variant: "current" | "done" | "locked") => {
     variant === "current"
       ? "box-shadow:0 0 0 6px hsl(210 100% 56% / 0.25), 0 0 25px hsl(195 100% 60% / 0.7);"
       : "box-shadow:0 4px 12px rgba(0,0,0,.4);";
+  const glyph = variant === "done" ? "✓" : "★";
   return makeIcon(
-    `<div style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9999px;background:${bg};border:3px solid white;${pulse}color:white;font-weight:700;font-size:14px;">★</div>`,
+    `<div style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9999px;background:${bg};border:3px solid white;${pulse}color:white;font-weight:700;font-size:14px;">${glyph}</div>`,
   );
 };
 
-const MapRefBridge = ({ onReady }: { onReady: (m: L.Map) => void }) => {
+const MapBridge = ({
+  onReady,
+  onUserInteract,
+}: {
+  onReady: (m: L.Map) => void;
+  onUserInteract: () => void;
+}) => {
   const map = useMap();
-  useEffect(() => { onReady(map); }, [map, onReady]);
+  useEffect(() => {
+    onReady(map);
+    // Force a relayout in case the container size changed.
+    setTimeout(() => map.invalidateSize(), 100);
+  }, [map, onReady]);
+  useMapEvents({
+    dragstart: onUserInteract,
+    zoomstart: (e) => {
+      // Only count user-driven zooms.
+      // @ts-expect-error leaflet event has originalEvent on user gestures
+      if (e.originalEvent) onUserInteract();
+    },
+  });
   return null;
 };
 
@@ -44,33 +68,99 @@ export const MapScreen = () => {
   const next = locations.find((l) => l.id === currentLocationId);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const [autoFollow, setAutoFollow] = useState(true);
+  const didInitialFitRef = useRef(false);
 
-  // Sempre arrancar centrado em Vizela; o auto-follow move depois para o GPS.
-  const center = DEFAULT_CENTER;
+  const handleUserInteract = useCallback(() => setAutoFollow(false), []);
 
+  // Initial fit: include school + all locations once the map is ready.
+  useEffect(() => {
+    if (!mapInstance || didInitialFitRef.current) return;
+    const points: L.LatLngExpression[] = [SCHOOL, ...locations.map((l) => [l.lat, l.lng] as [number, number])];
+    if (points.length > 1) {
+      mapInstance.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 19 });
+    } else {
+      mapInstance.setView(SCHOOL, 18);
+    }
+    didInitialFitRef.current = true;
+  }, [mapInstance, locations]);
+
+  // Follow GPS when enabled.
   useEffect(() => {
     if (!mapInstance || !position || !autoFollow) return;
-    mapInstance.setView([position.lat, position.lng], mapInstance.getZoom() || 18, { animate: true });
+    mapInstance.setView([position.lat, position.lng], Math.max(mapInstance.getZoom(), 18), { animate: true });
   }, [mapInstance, position, autoFollow]);
+
+  const recenter = () => {
+    if (!mapInstance) return;
+    setAutoFollow(true);
+    if (position) {
+      mapInstance.setView([position.lat, position.lng], 19, { animate: true });
+    } else {
+      mapInstance.setView(SCHOOL, 18, { animate: true });
+    }
+  };
+
+  const headerStatus = useMemo(() => {
+    if (loading && !position) {
+      return (
+        <>
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> A obter GPS…
+        </>
+      );
+    }
+    if (error && !position) {
+      return (
+        <>
+          <AlertTriangle className="h-3.5 w-3.5 text-destructive" /> GPS indisponível
+        </>
+      );
+    }
+    if (position) {
+      return (
+        <>
+          <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+          GPS ativo · ±{Math.round(position.accuracy)}m
+        </>
+      );
+    }
+    return null;
+  }, [loading, error, position]);
 
   return (
     <div className="min-h-screen pb-32 flex flex-col gap-4 animate-fade-in">
       <header className="px-5 pt-5">
         <h2 className="text-2xl font-black">Mapa da Escola</h2>
-        <p className="text-sm text-muted-foreground">Localização em tempo real e pontos do tesouro</p>
+        <p className="text-sm text-muted-foreground">Escola Profissional Oficina · Santo Tirso</p>
       </header>
 
       <div className="px-5"><ProgressBar /></div>
 
       <div className="px-5">
         <div className="relative rounded-3xl overflow-hidden border border-border shadow-card bg-card h-[55vh] min-h-[340px]">
-          <MapContainer center={center} zoom={18} scrollWheelZoom className="h-full w-full" zoomControl={false}>
-            <MapRefBridge onReady={setMapInstance} />
+          <MapContainer
+            center={SCHOOL}
+            zoom={18}
+            scrollWheelZoom
+            className="h-full w-full"
+            zoomControl={false}
+            preferCanvas
+          >
+            <MapBridge onReady={setMapInstance} onUserInteract={handleUserInteract} />
             <TileLayer
               attribution='&copy; Esri'
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
               maxZoom={20}
             />
+
+            <Marker position={SCHOOL} icon={schoolIcon}>
+              <Popup>
+                <div className="text-sm">
+                  <div className="font-bold">Escola Profissional Oficina</div>
+                  <div className="text-xs opacity-70">Santo Tirso</div>
+                </div>
+              </Popup>
+            </Marker>
+
             {position && (
               <>
                 <Marker position={[position.lat, position.lng]} icon={userIcon}>
@@ -78,11 +168,12 @@ export const MapScreen = () => {
                 </Marker>
                 <Circle
                   center={[position.lat, position.lng]}
-                  radius={position.accuracy}
+                  radius={Math.min(position.accuracy, 80)}
                   pathOptions={{ color: "hsl(210 100% 56%)", fillColor: "hsl(210 100% 56%)", fillOpacity: 0.1, weight: 1 }}
                 />
               </>
             )}
+
             {locations.map((loc) => {
               const isDone = completedLocationIds.includes(loc.id);
               const isCurrent = loc.id === currentLocationId;
@@ -92,7 +183,7 @@ export const MapScreen = () => {
                   <Popup>
                     <div className="text-sm">
                       <div className="font-bold">{loc.name}</div>
-                      <div className="text-xs opacity-70">{loc.hint}</div>
+                      {loc.hint && <div className="text-xs opacity-70">{loc.hint}</div>}
                     </div>
                   </Popup>
                 </Marker>
@@ -101,30 +192,31 @@ export const MapScreen = () => {
           </MapContainer>
 
           <div className="absolute top-3 left-3 z-[400] rounded-full bg-card/90 backdrop-blur px-3 py-1.5 text-xs flex items-center gap-2 border border-border shadow-card">
-            {loading && !position ? (
-              <><Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> A obter GPS…</>
-            ) : error ? (
-              <><AlertTriangle className="h-3.5 w-3.5 text-destructive" /> GPS indisponível</>
-            ) : position ? (
-              <>
-                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                GPS ativo · ±{Math.round(position.accuracy)}m
-              </>
-            ) : null}
+            {headerStatus}
           </div>
 
-          {position && mapInstance && (
+          <div className="absolute bottom-3 right-3 z-[400] flex flex-col gap-2">
             <button
               onClick={() => {
-                setAutoFollow(true);
-                mapInstance.setView([position.lat, position.lng], 19, { animate: true });
+                if (!mapInstance) return;
+                setAutoFollow(false);
+                mapInstance.setView(SCHOOL, 18, { animate: true });
               }}
-              className="absolute bottom-3 right-3 z-[400] h-11 w-11 rounded-full bg-card/95 backdrop-blur border border-border shadow-card flex items-center justify-center text-primary active:scale-95 transition"
-              aria-label="Centrar"
+              className="h-11 w-11 rounded-full bg-card/95 backdrop-blur border border-border shadow-card flex items-center justify-center text-accent active:scale-95 transition"
+              aria-label="Centrar na escola"
+              title="Centrar na escola"
+            >
+              <School className="h-5 w-5" />
+            </button>
+            <button
+              onClick={recenter}
+              className="h-11 w-11 rounded-full bg-card/95 backdrop-blur border border-border shadow-card flex items-center justify-center text-primary active:scale-95 transition"
+              aria-label="Centrar em mim"
+              title="Centrar em mim"
             >
               <Crosshair className="h-5 w-5" />
             </button>
-          )}
+          </div>
         </div>
       </div>
 
