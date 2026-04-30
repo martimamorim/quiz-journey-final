@@ -114,7 +114,7 @@ export const ScannerScreen = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col p-5 pb-32 animate-fade-in">
+    <div className="min-h-screen flex flex-col p-5 pb-8 animate-fade-in">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => go("map")} className="rounded-full">
           <ArrowLeft className="h-5 w-5" />
