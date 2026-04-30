@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/auth/AuthProvider";
 import { GameProvider, useGame } from "@/game/GameContext";
 import { AuthScreen } from "@/components/auth/AuthScreen";
@@ -8,7 +8,6 @@ import { QuizScreen } from "@/components/game/QuizScreen";
 import { FinalScreen } from "@/components/game/FinalScreen";
 import { Loader2, LogOut, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 import { isMusicEnabled, startMusic, toggleMusic } from "@/game/music";
 
 const Router = () => {
