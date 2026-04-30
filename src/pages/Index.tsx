@@ -1,37 +1,69 @@
+import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/auth/AuthProvider";
 import { GameProvider, useGame } from "@/game/GameContext";
 import { AuthScreen } from "@/components/auth/AuthScreen";
-import { HomeScreen } from "@/components/game/HomeScreen";
 import { MapScreen } from "@/components/game/MapScreen";
 import { ScannerScreen } from "@/components/game/ScannerScreen";
 import { QuizScreen } from "@/components/game/QuizScreen";
 import { FinalScreen } from "@/components/game/FinalScreen";
-import { ProgressScreen } from "@/components/game/ProgressScreen";
-import { HelpScreen } from "@/components/game/HelpScreen";
-import { RankingScreen } from "@/components/game/RankingScreen";
-import { TeacherScreen } from "@/components/game/TeacherScreen";
-import { BottomNav } from "@/components/game/BottomNav";
-import { Loader2 } from "lucide-react";
-
-const NAV_SCREENS = new Set(["home", "map", "scanner", "ranking", "help", "progress"]);
+import { Loader2, LogOut, Volume2, VolumeX } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { isMusicEnabled, startMusic, toggleMusic } from "@/game/music";
 
 const Router = () => {
   const { screen } = useGame();
-  const showNav = NAV_SCREENS.has(screen);
   return (
     <>
-      {screen === "home" && <HomeScreen />}
-      {screen === "map" && <MapScreen />}
+      {(screen === "home" || screen === "map") && <MapScreen />}
       {screen === "scanner" && <ScannerScreen />}
       {screen === "quiz" && <QuizScreen />}
       {screen === "final" && <FinalScreen />}
-      {screen === "progress" && <ProgressScreen />}
-      {screen === "help" && <HelpScreen />}
-      {screen === "ranking" && <RankingScreen />}
-      {screen === "teacher" && <TeacherScreen />}
-      {showNav && <BottomNav />}
     </>
   );
+};
+
+const TopBar = () => {
+  const { signOut, profile } = useAuth();
+  const [musicOn, setMusicOn] = useState(isMusicEnabled());
+  return (
+    <div className="fixed top-0 inset-x-0 z-[1000] mx-auto max-w-md px-3 pt-[max(env(safe-area-inset-top),0.5rem)]">
+      <div className="flex items-center gap-2 rounded-2xl border border-border bg-card/85 backdrop-blur px-3 py-2 shadow-card">
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Aluno</div>
+          <div className="text-sm font-semibold truncate">{profile?.display_name ?? "—"}</div>
+        </div>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-9 w-9 rounded-full"
+          onClick={async () => setMusicOn(await toggleMusic())}
+          aria-label={musicOn ? "Desligar música" : "Ligar música"}
+        >
+          {musicOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+        </Button>
+        <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full" onClick={signOut} aria-label="Sair">
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const StartMusicOnce = () => {
+  useEffect(() => {
+    const handler = () => {
+      startMusic();
+      window.removeEventListener("pointerdown", handler);
+      window.removeEventListener("keydown", handler);
+    };
+    window.addEventListener("pointerdown", handler, { once: true });
+    window.addEventListener("keydown", handler, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", handler);
+      window.removeEventListener("keydown", handler);
+    };
+  }, []);
+  return null;
 };
 
 const Gate = () => {
@@ -46,7 +78,11 @@ const Gate = () => {
   if (!user) return <AuthScreen />;
   return (
     <GameProvider>
-      <Router />
+      <StartMusicOnce />
+      <TopBar />
+      <div className="pt-16">
+        <Router />
+      </div>
     </GameProvider>
   );
 };

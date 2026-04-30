@@ -60,7 +60,7 @@ export const QuizScreen = () => {
   };
 
   return (
-    <div className="min-h-screen p-5 flex flex-col animate-fade-in pb-32">
+    <div className="min-h-screen p-5 flex flex-col animate-fade-in pb-8">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => go("map")} className="rounded-full">
           <ArrowLeft className="h-5 w-5" />

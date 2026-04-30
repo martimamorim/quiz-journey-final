@@ -4,106 +4,57 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
+/* Paleta calma — azul-petróleo profundo, neutros suaves, acentos discretos */
 @layer base {
   :root {
-    /* Treasure Hunt — futuristic blue/white/black */
-    --background: 222 47% 6%;
-    --foreground: 210 40% 98%;
+    --background: 215 28% 9%;
+    --foreground: 210 20% 92%;
 
-    --card: 222 40% 10%;
-    --card-foreground: 210 40% 98%;
+    --card: 215 25% 13%;
+    --card-foreground: 210 20% 92%;
 
-    --popover: 222 40% 10%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 215 25% 13%;
+    --popover-foreground: 210 20% 92%;
 
-    --primary: 210 100% 56%;
-    --primary-foreground: 0 0% 100%;
-    --primary-glow: 195 100% 60%;
+    --primary: 200 55% 55%;
+    --primary-foreground: 215 30% 10%;
+    --primary-glow: 200 50% 65%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 215 20% 18%;
+    --secondary-foreground: 210 20% 92%;
 
-    --muted: 217 33% 14%;
-    --muted-foreground: 215 20% 70%;
+    --muted: 215 20% 16%;
+    --muted-foreground: 215 12% 65%;
 
-    --accent: 195 100% 60%;
-    --accent-foreground: 222 47% 6%;
+    --accent: 180 25% 55%;
+    --accent-foreground: 215 30% 10%;
 
-    --success: 142 76% 50%;
-    --success-foreground: 0 0% 100%;
+    --success: 150 35% 50%;
+    --success-foreground: 215 30% 10%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 50% 55%;
+    --destructive-foreground: 210 20% 95%;
 
-    --border: 217 33% 20%;
-    --input: 217 33% 17%;
-    --ring: 210 100% 56%;
+    --border: 215 20% 22%;
+    --input: 215 20% 18%;
+    --ring: 200 55% 55%;
 
     --radius: 1rem;
 
-    --gradient-primary: linear-gradient(135deg, hsl(210 100% 56%), hsl(195 100% 60%));
-    --gradient-bg: radial-gradient(ellipse at top, hsl(217 60% 14%), hsl(222 47% 6%));
-    --gradient-treasure: linear-gradient(135deg, hsl(45 100% 60%), hsl(30 100% 55%));
-    --shadow-glow: 0 0 40px hsl(210 100% 56% / 0.5);
-    --shadow-card: 0 10px 40px -10px hsl(210 100% 30% / 0.4);
+    --gradient-primary: linear-gradient(135deg, hsl(200 50% 45%), hsl(200 45% 55%));
+    --gradient-bg: radial-gradient(ellipse at top, hsl(215 25% 14%), hsl(215 28% 8%));
+    --gradient-treasure: linear-gradient(135deg, hsl(40 45% 55%), hsl(30 40% 50%));
+    --shadow-glow: 0 0 30px hsl(200 50% 40% / 0.35);
+    --shadow-card: 0 10px 30px -12px hsl(215 40% 4% / 0.6);
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
@@ -121,7 +72,7 @@ All colors MUST be HSL.
   }
 }
 
-/* Keep Leaflet panes/controls below Radix dialogs (z-50) */
+/* Manter Leaflet abaixo de Radix dialogs (z-50) */
 .leaflet-pane,
 .leaflet-top,
 .leaflet-bottom,

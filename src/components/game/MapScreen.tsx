@@ -127,7 +127,7 @@ export const MapScreen = () => {
   }, [loading, error, position]);
 
   return (
-    <div className="min-h-screen pb-32 flex flex-col gap-4 animate-fade-in">
+    <div className="min-h-screen pb-8 flex flex-col gap-4 animate-fade-in">
       <header className="px-5 pt-5">
         <h2 className="text-2xl font-black">Mapa da Escola</h2>
         <p className="text-sm text-muted-foreground">Escola Profissional Oficina · Santo Tirso</p>

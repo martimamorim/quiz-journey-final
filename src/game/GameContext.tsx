@@ -186,6 +186,23 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Seleciona automaticamente a 1ª (única) turma do aluno
+  useEffect(() => {
+    if (!user || classId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("class_members")
+        .select("class_id")
+        .eq("student_id", user.id)
+        .limit(1);
+      const cid = data?.[0]?.class_id;
+      if (cid) {
+        localStorage.setItem(ACTIVE_CLASS_KEY, cid);
+        setClassId(cid);
+      }
+    })();
+  }, [user, classId]);
+
   useEffect(() => {
     if (classId) {
       loadClassData(classId);
@@ -197,6 +214,20 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
       loadActiveRun(classId);
     }
   }, [classId, user?.id, questions, loadActiveRun]);
+
+  // Inicia automaticamente uma run se ainda não existir
+  useEffect(() => {
+    if (!user || !classId || runId || loading) return;
+    if (locations.length === 0) return;
+    (async () => {
+      const { data } = await supabase
+        .from("runs")
+        .insert({ student_id: user.id, class_id: classId, total_points: 0 })
+        .select("id")
+        .single();
+      if (data) setRunId(data.id);
+    })();
+  }, [user, classId, runId, loading, locations.length]);
 
   const startRun = async () => {
     if (!user || !classId) return;

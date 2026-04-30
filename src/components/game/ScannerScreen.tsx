@@ -99,48 +99,8 @@ export const ScannerScreen = () => {
     setRetrying(false);
   };
 
-  useEffect(() => {
-    if (!target) {
-      setStarting(false);
-      return;
-    }
-    stoppedRef.current = false;
+  // (segundo efeito duplicado removido — startScanner trata de tudo)
 
-    const start = async () => {
-      try {
-        const html5Qr = new Html5Qrcode(containerId, /* verbose */ false);
-        scannerRef.current = html5Qr;
-        const maxBoxSize = Math.min(window.innerWidth * 0.8, 320);
-        await html5Qr.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: maxBoxSize, height: maxBoxSize }, aspectRatio: 1.0 },
-          (decoded) => {
-            if (stoppedRef.current) return;
-            const value = decoded.trim();
-            if (target && value === target.qr_code) {
-              stoppedRef.current = true;
-              playScan();
-              vibrate(80);
-              stopScanner().finally(() => go("quiz"));
-            } else {
-              toast.error("QR errado", { description: "Este não é o código deste local." });
-            }
-          },
-          () => { /* per-frame errors silenced */ },
-        );
-        setStarting(false);
-      } catch {
-        setError("Não foi possível aceder à câmara. Verifica as permissões ou usa o botão de simulação.");
-        setStarting(false);
-      }
-    };
-    start();
-
-    return () => {
-      stoppedRef.current = true;
-      stopScanner();
-    };
-  }, [currentLocationId, go, target]);
 
   const simulateScan = () => {
     if (!target) {
@@ -154,7 +114,7 @@ export const ScannerScreen = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col p-5 pb-32 animate-fade-in">
+    <div className="min-h-screen flex flex-col p-5 pb-8 animate-fade-in">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => go("map")} className="rounded-full">
           <ArrowLeft className="h-5 w-5" />

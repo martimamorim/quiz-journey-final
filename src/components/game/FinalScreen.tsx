@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useGame } from "@/game/GameContext";
-import { Trophy, RotateCcw, Sparkles, Medal, Clock, Check, X } from "lucide-react";
-import { playWin, vibrate } from "@/game/sound";
+import { Trophy, RotateCcw, Clock, Check, X, Loader2 } from "lucide-react";
+import { vibrate } from "@/game/sound";
+import { supabase } from "@/integrations/supabase/client";
 
 const formatDuration = (seconds: number) => {
   const m = Math.floor(seconds / 60);
@@ -11,13 +12,49 @@ const formatDuration = (seconds: number) => {
   return `${m} min ${s.toString().padStart(2, "0")}s`;
 };
 
+type Detail = {
+  question_text: string;
+  location_name: string;
+  selected_text: string;
+  correct_text: string;
+  is_correct: boolean;
+};
+
 export const FinalScreen = () => {
-  const { resetProgress, summary, go } = useGame();
+  const { resetProgress, summary, runId, locations, questions } = useGame();
+  const [details, setDetails] = useState<Detail[] | null>(null);
 
   useEffect(() => {
-    playWin();
-    vibrate([100, 50, 100, 50, 200]);
+    vibrate([100, 50, 100]);
   }, []);
+
+  useEffect(() => {
+    if (!runId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("answers")
+        .select("question_id, selected_index, is_correct, answered_at")
+        .eq("run_id", runId)
+        .order("answered_at", { ascending: true });
+      if (!data) return;
+      const list: Detail[] = data.map((a) => {
+        let q: any = null;
+        let locName = "—";
+        for (const loc of locations) {
+          const found = (questions[loc.id] ?? []).find((x) => x.id === a.question_id);
+          if (found) { q = found; locName = loc.name; break; }
+        }
+        return {
+          question_text: q?.text ?? "Pergunta",
+          location_name: locName,
+          selected_text: q?.options?.[a.selected_index] ?? "—",
+          correct_text: q?.options?.[q?.correct_index] ?? "—",
+          is_correct: !!a.is_correct,
+        };
+      });
+      setDetails(list);
+    })();
+  }, [runId, locations, questions]);
 
   const correct = summary?.correctCount ?? 0;
   const wrong = summary?.wrongCount ?? 0;
@@ -25,79 +62,105 @@ export const FinalScreen = () => {
   const duration = summary?.durationSeconds ?? 0;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden pb-32">
-      {Array.from({ length: 18 }).map((_, i) => (
-        <Sparkles
-          key={i}
-          className="absolute text-primary animate-float opacity-60 pointer-events-none"
-          style={{
-            left: `${Math.random() * 100}%`,
-            top: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 2}s`,
-            width: `${12 + Math.random() * 20}px`,
-            height: `${12 + Math.random() * 20}px`,
-          }}
-        />
-      ))}
-
-      <div className="relative animate-bounce-in">
-        <div className="absolute inset-0 bg-gradient-treasure blur-3xl opacity-60 rounded-full" />
-        <div className="relative w-28 h-28 rounded-full bg-gradient-treasure flex items-center justify-center shadow-glow">
-          <Trophy className="w-14 h-14 text-background" />
+    <div className="min-h-screen flex flex-col items-center p-6 pb-12 animate-fade-in">
+      <div className="relative">
+        <div className="absolute inset-0 bg-primary/15 blur-2xl rounded-full" />
+        <div className="relative w-20 h-20 rounded-full bg-card border border-border flex items-center justify-center shadow-card">
+          <Trophy className="w-9 h-9 text-primary" />
         </div>
       </div>
 
-      <h1 className="mt-6 text-3xl font-black bg-gradient-treasure bg-clip-text text-transparent animate-scale-in">
-        Caça ao Tesouro Concluída!
-      </h1>
-      <p className="mt-2 text-sm text-muted-foreground max-w-xs">
-        Aqui está o teu resultado.
-      </p>
+      <h1 className="mt-5 text-2xl font-bold text-center">Caça ao tesouro concluída</h1>
+      <p className="mt-1 text-sm text-muted-foreground text-center">Aqui está o teu resumo.</p>
 
-      {/* Stats */}
-      <div className="mt-6 w-full max-w-sm grid gap-3 animate-fade-in">
-        <div className="rounded-2xl border border-border bg-card p-4 flex items-center gap-3 shadow-card">
-          <div className="h-11 w-11 rounded-xl bg-primary/15 text-primary flex items-center justify-center">
+      <div className="mt-6 w-full max-w-sm grid gap-3">
+        <div className="rounded-2xl border border-border bg-card p-4 flex items-center gap-3">
+          <div className="h-11 w-11 rounded-xl bg-secondary text-primary flex items-center justify-center">
             <Clock className="h-5 w-5" />
           </div>
-          <div className="flex-1 text-left">
+          <div className="flex-1">
             <div className="text-xs text-muted-foreground">Tempo total</div>
-            <div className="text-lg font-bold">{formatDuration(duration)}</div>
+            <div className="text-lg font-semibold">{formatDuration(duration)}</div>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-            <div className="h-10 w-10 rounded-xl bg-success/20 text-success flex items-center justify-center mb-2">
-              <Check className="h-5 w-5" />
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="h-9 w-9 rounded-lg bg-success/15 text-success flex items-center justify-center mb-2">
+              <Check className="h-4 w-4" />
             </div>
             <div className="text-xs text-muted-foreground">Certas</div>
-            <div className="text-2xl font-black text-success">{correct}</div>
+            <div className="text-2xl font-bold text-success">{correct}</div>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-            <div className="h-10 w-10 rounded-xl bg-destructive/20 text-destructive flex items-center justify-center mb-2">
-              <X className="h-5 w-5" />
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="h-9 w-9 rounded-lg bg-destructive/15 text-destructive flex items-center justify-center mb-2">
+              <X className="h-4 w-4" />
             </div>
             <div className="text-xs text-muted-foreground">Erradas</div>
-            <div className="text-2xl font-black text-destructive">{wrong}</div>
+            <div className="text-2xl font-bold text-destructive">{wrong}</div>
           </div>
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          Acertaste <span className="font-bold text-foreground">{correct}</span> de{" "}
-          <span className="font-bold text-foreground">{total}</span> perguntas.
+        <p className="text-xs text-muted-foreground text-center">
+          Acertaste <span className="font-semibold text-foreground">{correct}</span> de{" "}
+          <span className="font-semibold text-foreground">{total}</span> perguntas.
         </p>
       </div>
 
-      <Button
-        size="lg"
-        onClick={() => go("ranking")}
-        className="mt-6 h-14 px-8 rounded-full bg-gradient-primary text-primary-foreground font-bold shadow-glow"
-      >
-        <Medal className="mr-2 h-5 w-5" /> Ver Ranking
-      </Button>
-      <Button variant="ghost" onClick={resetProgress} className="mt-2 rounded-full">
-        <RotateCcw className="mr-2 h-4 w-4" /> Jogar Novamente
+      <div className="mt-6 w-full max-w-sm">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+          Revisão das respostas
+        </h2>
+        {details === null ? (
+          <div className="flex justify-center py-8 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : details.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">Sem respostas registadas.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {details.map((d, i) => (
+              <li
+                key={i}
+                className={`rounded-2xl border p-3 ${
+                  d.is_correct ? "border-success/30 bg-success/5" : "border-destructive/30 bg-destructive/5"
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <div
+                    className={`h-7 w-7 shrink-0 rounded-lg flex items-center justify-center ${
+                      d.is_correct ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
+                    }`}
+                  >
+                    {d.is_correct ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {d.location_name}
+                    </div>
+                    <div className="text-sm font-medium leading-snug">{d.question_text}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      A tua resposta:{" "}
+                      <span className={d.is_correct ? "text-success font-medium" : "text-destructive font-medium"}>
+                        {d.selected_text}
+                      </span>
+                    </div>
+                    {!d.is_correct && (
+                      <div className="text-xs text-muted-foreground">
+                        Resposta certa:{" "}
+                        <span className="text-success font-medium">{d.correct_text}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <Button variant="outline" onClick={resetProgress} className="mt-8 rounded-full">
+        <RotateCcw className="mr-2 h-4 w-4" /> Jogar novamente
       </Button>
     </div>
   );
