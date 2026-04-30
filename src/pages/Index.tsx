@@ -6,18 +6,27 @@ import { MapScreen } from "@/components/game/MapScreen";
 import { ScannerScreen } from "@/components/game/ScannerScreen";
 import { QuizScreen } from "@/components/game/QuizScreen";
 import { FinalScreen } from "@/components/game/FinalScreen";
+import { RankingScreen } from "@/components/game/RankingScreen";
+import { AboutScreen } from "@/components/game/AboutScreen";
+import { BottomNav } from "@/components/game/BottomNav";
 import { Loader2, LogOut, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isMusicEnabled, startMusic, toggleMusic } from "@/game/music";
 
+const NAV_SCREENS = new Set(["home", "map", "ranking", "about"]);
+
 const Router = () => {
   const { screen } = useGame();
+  const showNav = NAV_SCREENS.has(screen);
   return (
     <>
       {(screen === "home" || screen === "map") && <MapScreen />}
       {screen === "scanner" && <ScannerScreen />}
       {screen === "quiz" && <QuizScreen />}
       {screen === "final" && <FinalScreen />}
+      {screen === "ranking" && <RankingScreen />}
+      {screen === "about" && <AboutScreen />}
+      {showNav && <BottomNav />}
     </>
   );
 };

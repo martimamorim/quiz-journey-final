@@ -9,10 +9,8 @@ export type Screen =
   | "scanner"
   | "quiz"
   | "final"
-  | "progress"
-  | "help"
   | "ranking"
-  | "teacher";
+  | "about";
 
 export type DBLocation = {
   id: string;
