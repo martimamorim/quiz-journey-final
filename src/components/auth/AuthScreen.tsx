@@ -7,12 +7,13 @@ import { toast } from "sonner";
 import logo from "@/assets/logo.png";
 import { Loader2 } from "lucide-react";
 
-// Stable per-device identifier so each device gets its own student account
 const getDeviceId = () => {
   const KEY = "th-device-id";
   let id = localStorage.getItem(KEY);
   if (!id) {
-    id = (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/-/g, "").slice(0, 16);
+    id = (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36))
+      .replace(/-/g, "")
+      .slice(0, 16);
     localStorage.setItem(KEY, id);
   }
   return id;
@@ -28,60 +29,68 @@ export const AuthScreen = () => {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!code.trim()) {
       toast.error("Insere o código da turma");
       return;
     }
+
     setBusy(true);
-    const trimmedCode = code.trim().toUpperCase();
-    const deviceId = getDeviceId();
 
-    // 1) Validate class code
-    const { data: cls, error: clsErr } = await supabase
-      .from("classes")
-      .select("id, name")
-      .eq("join_code", trimmedCode)
-      .maybeSingle();
-    if (clsErr || !cls) {
-      setBusy(false);
-      toast.error("Código de turma inválido");
-      return;
-    }
+    try {
+      const trimmedCode = code.trim().toUpperCase();
+      const deviceId = getDeviceId();
 
-    const email = codeToEmail(trimmedCode, deviceId);
-    const password = codeToPassword(trimmedCode, deviceId);
-    const displayName = `Aluno-${deviceId.slice(0, 4).toUpperCase()}`;
-
-    // 2) Sign in or sign up
-    const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-    if (signInErr) {
-      const { error: signUpErr } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: window.location.origin,
-          data: { display_name: displayName, role: "student" },
-        },
-      });
-      if (signUpErr) {
-        setBusy(false);
-        toast.error("Não foi possível entrar", { description: signUpErr.message });
+      const { data: cls, error: clsErr } = await supabase
+        .from("classes")
+        .select("id, name")
+        .eq("join_code", trimmedCode)
+        .maybeSingle();
+      if (clsErr || !cls) {
+        toast.error("Código de turma inválido");
         return;
       }
-    }
 
-    // 3) Ensure membership
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase
-        .from("class_members")
-        .upsert({ class_id: cls.id, student_id: user.id }, { onConflict: "class_id,student_id" });
-    }
+      const email = codeToEmail(trimmedCode, deviceId);
+      const password = codeToPassword(trimmedCode, deviceId);
+      const displayName = `Aluno-${deviceId.slice(0, 4).toUpperCase()}`;
 
-    setBusy(false);
-    toast.success(`Bem-vindo à turma ${cls.name}!`);
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInErr) {
+        const canSignUp = signInErr.status === 400 || signInErr.status === 401 || /invalid login credentials/i.test(signInErr.message);
+        if (!canSignUp) throw signInErr;
+
+        const { error: signUpErr } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { display_name: displayName, role: "student" },
+          },
+        });
+        if (signUpErr) throw signUpErr;
+      }
+
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr || !userData?.user) {
+        throw userErr ?? new Error("Não foi possível obter o utilizador");
+      }
+
+      await supabase.from("class_members").upsert(
+        { class_id: cls.id, student_id: userData.user.id },
+        { onConflict: "class_id,student_id" },
+      );
+
+      toast.success(`Bem-vindo à turma ${cls.name}!`);
+    } catch (error) {
+      console.error("Erro de autenticação:", error);
+      toast.error("Não foi possível entrar", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

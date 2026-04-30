@@ -8,7 +8,7 @@ import { ProgressBar } from "./ProgressBar";
 import { Crosshair, Loader2, MapPin, QrCode, AlertTriangle, Trophy, School } from "lucide-react";
 
 // Escola Profissional Oficina – Santo Tirso
-const SCHOOL: [number, number] = [41.3424, -8.4731];
+const SCHOOL: [number, number] = [41.3438, -8.4782];
 
 const makeIcon = (html: string, size = 36) =>
   L.divIcon({ className: "th-marker", html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
@@ -147,9 +147,10 @@ export const MapScreen = () => {
           >
             <MapBridge onReady={setMapInstance} onUserInteract={handleUserInteract} />
             <TileLayer
-              attribution='&copy; Esri'
-              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-              maxZoom={20}
+              attribution='&copy; <a href="https://maps.google.com">Google Maps</a>'
+              url="https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
+              subdomains={["mt0", "mt1", "mt2", "mt3"]}
+              maxZoom={21}
             />
 
             <Marker position={SCHOOL} icon={schoolIcon}>

@@ -17,7 +17,10 @@ export const BottomNav = () => {
   const { screen, go } = useGame();
 
   return (
-    <nav aria-label="Navegação principal" className="fixed bottom-0 inset-x-0 z-[1000] mx-auto max-w-md">
+    <nav
+      aria-label="Navegação principal"
+      className="fixed bottom-0 inset-x-0 z-[1000] mx-auto max-w-md pb-[env(safe-area-inset-bottom)]"
+    >
       <div className="relative mx-3 mb-3 rounded-3xl border border-border bg-card/90 backdrop-blur-xl shadow-card">
         <div className="flex items-end justify-around h-20 px-2 pb-2 pt-2">
           {LEFT.map((it) => (

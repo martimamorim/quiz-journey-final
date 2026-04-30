@@ -26,48 +26,64 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (uid: string) => {
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("id, display_name")
-      .eq("id", uid)
-      .maybeSingle();
-    setProfile(prof ?? null);
-    const { data: roleRow } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", uid)
-      .maybeSingle();
-    setRole((roleRow?.role as AppRole) ?? null);
+    try {
+      const { data: prof, error: profErr } = await supabase
+        .from("profiles")
+        .select("id, display_name")
+        .eq("id", uid)
+        .maybeSingle();
+      if (profErr) throw profErr;
+      setProfile(prof ?? null);
+
+      const { data: roleRow, error: roleErr } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", uid)
+        .maybeSingle();
+      if (roleErr) throw roleErr;
+      setRole((roleRow?.role as AppRole) ?? null);
+    } catch (error) {
+      console.error("Erro ao carregar perfil:", error);
+      setProfile(null);
+      setRole(null);
+    }
   };
 
   useEffect(() => {
-    // 1) Set up listener FIRST
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => {
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess?.user) {
-        // defer to avoid deadlock
-        setTimeout(() => loadProfile(sess.user.id), 0);
+        loadProfile(sess.user.id);
       } else {
         setProfile(null);
         setRole(null);
       }
     });
-    // 2) Then fetch existing session
-    supabase.auth.getSession().then(({ data: { session: sess } }) => {
-      setSession(sess);
-      setUser(sess?.user ?? null);
-      if (sess?.user) {
-        loadProfile(sess.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
-    return () => sub.subscription.unsubscribe();
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session: sess } }) => {
+        setSession(sess);
+        setUser(sess?.user ?? null);
+        if (sess?.user) {
+          loadProfile(sess.user.id);
+        }
+      })
+      .catch((error) => {
+        console.error("Erro a carregar sessão:", error);
+      })
+      .finally(() => setLoading(false));
+
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+    }
   };
 
   const refresh = async () => {

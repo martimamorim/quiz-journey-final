@@ -89,59 +89,88 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
 
   const loadClassData = useCallback(async (cId: string) => {
     setLoading(true);
-    const { data: locs } = await supabase
-      .from("locations")
-      .select("*")
-      .eq("class_id", cId)
-      .order("order_index", { ascending: true });
-    // Hard cap at 5 locations on the client too.
-    const list = ((locs ?? []) as DBLocation[]).slice(0, 5);
-    setLocations(list);
-
-    if (list.length > 0) {
-      const { data: qs } = await supabase
-        .from("questions")
+    try {
+      const { data: locs, error: locErr } = await supabase
+        .from("locations")
         .select("*")
-        .in("location_id", list.map((l) => l.id))
+        .eq("class_id", cId)
         .order("order_index", { ascending: true });
-      const grouped: Record<string, DBQuestion[]> = {};
-      (qs ?? []).forEach((q: any) => {
-        const opts = Array.isArray(q.options) ? q.options : JSON.parse(q.options ?? "[]");
-        const item = { ...q, options: opts } as DBQuestion;
-        // Only keep the first question per location.
-        if (!grouped[q.location_id]) grouped[q.location_id] = [item];
+      if (locErr) throw locErr;
+
+      const list = ((locs ?? []) as DBLocation[]).slice(0, 5);
+      setLocations(list);
+
+      if (list.length > 0) {
+        const { data: qs, error: qsErr } = await supabase
+          .from("questions")
+          .select("*")
+          .in("location_id", list.map((l) => l.id))
+          .order("order_index", { ascending: true });
+        if (qsErr) throw qsErr;
+
+        const grouped: Record<string, DBQuestion[]> = {};
+        (qs ?? []).forEach((q: any) => {
+          const opts = Array.isArray(q.options) ? q.options : JSON.parse(q.options ?? "[]");
+          const item = { ...q, options: opts } as DBQuestion;
+          if (!grouped[q.location_id]) grouped[q.location_id] = [item];
+        });
+        setQuestions(grouped);
+      } else {
+        setQuestions({});
+      }
+    } catch (error) {
+      console.error("Erro ao carregar dados da turma:", error);
+      toast.error("Não foi possível carregar a turma", {
+        description: error instanceof Error ? error.message : undefined,
       });
-      setQuestions(grouped);
-    } else {
+      setLocations([]);
       setQuestions({});
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const loadActiveRun = useCallback(async (cId: string) => {
     if (!user) return;
-    const { data: runs } = await supabase
-      .from("runs")
-      .select("id, total_points, finished_at")
-      .eq("class_id", cId)
-      .eq("student_id", user.id)
-      .order("started_at", { ascending: false })
-      .limit(1);
-    const active = runs?.find((r) => !r.finished_at);
-    if (active) {
-      setRunId(active.id);
-      setTotalPoints(active.total_points ?? 0);
-      const { data: ans } = await supabase
+
+    try {
+      const { data: runs, error: runsErr } = await supabase
+        .from("runs")
+        .select("id, total_points, finished_at")
+        .eq("class_id", cId)
+        .eq("student_id", user.id)
+        .order("started_at", { ascending: false })
+        .limit(1);
+      if (runsErr) throw runsErr;
+
+      const active = runs?.find((r) => !r.finished_at);
+      if (!active) {
+        setRunId(null);
+        setTotalPoints(0);
+        setCompletedLocationIds([]);
+        return;
+      }
+
+      const { data: ans, error: ansErr } = await supabase
         .from("answers")
         .select("question_id")
         .eq("run_id", active.id);
+      if (ansErr) throw ansErr;
+
       const answeredQs = new Set((ans ?? []).map((a) => a.question_id));
       const done: string[] = [];
       Object.entries(questions).forEach(([locId, qs]) => {
         if (qs.length > 0 && qs.every((q) => answeredQs.has(q.id))) done.push(locId);
       });
+
+      setRunId(active.id);
+      setTotalPoints(active.total_points ?? 0);
       setCompletedLocationIds(done);
-    } else {
+    } catch (error) {
+      console.error("Erro ao carregar percurso:", error);
+      toast.error("Erro ao carregar percurso", {
+        description: error instanceof Error ? error.message : undefined,
+      });
       setRunId(null);
       setTotalPoints(0);
       setCompletedLocationIds([]);
@@ -152,124 +181,164 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(ACTIVE_CLASS_KEY, id);
     setClassId(id);
     await loadClassData(id);
+    if (user) {
+      await loadActiveRun(id);
+    }
   };
 
   useEffect(() => {
-    if (classId) loadClassData(classId);
+    if (classId) {
+      loadClassData(classId);
+    }
   }, [classId, loadClassData]);
 
   useEffect(() => {
-    if (classId) loadActiveRun(classId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classId, locations.length, Object.keys(questions).length, user?.id]);
+    if (classId && user?.id) {
+      loadActiveRun(classId);
+    }
+  }, [classId, user?.id, questions, loadActiveRun]);
 
   const startRun = async () => {
     if (!user || !classId) return;
-    const { data, error } = await supabase
-      .from("runs")
-      .insert({ student_id: user.id, class_id: classId, total_points: 0 })
-      .select("id")
-      .single();
-    if (error || !data) {
-      toast.error("Erro ao iniciar percurso", { description: error?.message });
-      return;
+
+    try {
+      const { data, error } = await supabase
+        .from("runs")
+        .insert({ student_id: user.id, class_id: classId, total_points: 0 })
+        .select("id")
+        .single();
+      if (error || !data) throw error ?? new Error("Não foi possível criar o percurso");
+
+      setRunId(data.id);
+      setTotalPoints(0);
+      setCompletedLocationIds([]);
+      setSummary(null);
+    } catch (error) {
+      console.error("Erro ao iniciar percurso:", error);
+      toast.error("Erro ao iniciar percurso", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
-    setRunId(data.id);
-    setTotalPoints(0);
-    setCompletedLocationIds([]);
-    setSummary(null);
   };
 
-  // SILENT recording: no toast, no immediate feedback to the student.
   const recordAnswers = async (
     locationId: string,
     answers: { question_id: string; selected_index: number }[],
   ) => {
     if (!user || !classId) return;
 
-    let activeRunId = runId;
-    if (!activeRunId) {
-      const { data, error } = await supabase
-        .from("runs")
-        .insert({ student_id: user.id, class_id: classId, total_points: 0 })
-        .select("id")
-        .single();
-      if (error || !data) {
-        toast.error("Erro ao iniciar percurso");
-        return;
+    try {
+      let activeRunId = runId;
+      if (!activeRunId) {
+        const { data, error } = await supabase
+          .from("runs")
+          .insert({ student_id: user.id, class_id: classId, total_points: 0 })
+          .select("id")
+          .single();
+        if (error || !data) throw error ?? new Error("Não foi possível iniciar percurso");
+
+        activeRunId = data.id;
+        setRunId(activeRunId);
       }
-      activeRunId = data.id;
-      setRunId(activeRunId);
+
+      const locQs = questions[locationId] ?? [];
+      let pointsEarned = 0;
+      const rows = answers.map((a) => {
+        const q = locQs.find((x) => x.id === a.question_id);
+        const ok = !!q && q.correct_index === a.selected_index;
+        const pts = ok ? q!.points : 0;
+        pointsEarned += pts;
+        return {
+          run_id: activeRunId!,
+          question_id: a.question_id,
+          selected_index: a.selected_index,
+          is_correct: ok,
+          points_earned: pts,
+        };
+      });
+
+      if (rows.length > 0) {
+        const { error: insertError } = await supabase.from("answers").insert(rows);
+        if (insertError) throw insertError;
+      }
+
+      const newTotal = totalPoints + pointsEarned;
+      setTotalPoints(newTotal);
+      setCompletedLocationIds((prev) => Array.from(new Set([...prev, locationId])));
+
+      const { error: updateError } = await supabase.from("runs").update({ total_points: newTotal }).eq("id", activeRunId);
+      if (updateError) throw updateError;
+    } catch (error) {
+      console.error("Erro ao registar respostas:", error);
+      toast.error("Não foi possível registar as respostas", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
-
-    const locQs = questions[locationId] ?? [];
-    let pointsEarned = 0;
-    const rows = answers.map((a) => {
-      const q = locQs.find((x) => x.id === a.question_id);
-      const ok = !!q && q.correct_index === a.selected_index;
-      const pts = ok ? q!.points : 0;
-      pointsEarned += pts;
-      return {
-        run_id: activeRunId!,
-        question_id: a.question_id,
-        selected_index: a.selected_index,
-        is_correct: ok,
-        points_earned: pts,
-      };
-    });
-
-    if (rows.length > 0) await supabase.from("answers").insert(rows);
-
-    const newTotal = totalPoints + pointsEarned;
-    setTotalPoints(newTotal);
-    setCompletedLocationIds((prev) => Array.from(new Set([...prev, locationId])));
-
-    await supabase.from("runs").update({ total_points: newTotal }).eq("id", activeRunId);
   };
 
   const finishRun = async (): Promise<RunSummary | null> => {
     if (!runId) return null;
-    const startedRow = await supabase.from("runs").select("started_at").eq("id", runId).single();
-    const startedAt = startedRow.data?.started_at ? new Date(startedRow.data.started_at) : new Date();
-    const duration = Math.max(1, Math.round((Date.now() - startedAt.getTime()) / 1000));
 
-    // Compute correct/wrong totals from saved answers.
-    const { data: ans } = await supabase
-      .from("answers")
-      .select("is_correct")
-      .eq("run_id", runId);
-    const totalAnswered = ans?.length ?? 0;
-    const correct = (ans ?? []).filter((a) => a.is_correct).length;
-    const wrong = totalAnswered - correct;
+    try {
+      const startedRow = await supabase.from("runs").select("started_at").eq("id", runId).single();
+      const startedAt = startedRow.data?.started_at ? new Date(startedRow.data.started_at) : new Date();
+      const duration = Math.max(1, Math.round((Date.now() - startedAt.getTime()) / 1000));
 
-    await supabase
-      .from("runs")
-      .update({ finished_at: new Date().toISOString(), duration_seconds: duration })
-      .eq("id", runId);
+      const { data: ans, error: ansErr } = await supabase
+        .from("answers")
+        .select("is_correct")
+        .eq("run_id", runId);
+      if (ansErr) throw ansErr;
 
-    const result: RunSummary = {
-      correctCount: correct,
-      wrongCount: wrong,
-      totalQuestions: totalAnswered,
-      durationSeconds: duration,
-    };
-    setSummary(result);
-    return result;
+      const totalAnswered = ans?.length ?? 0;
+      const correct = (ans ?? []).filter((a) => a.is_correct).length;
+      const wrong = totalAnswered - correct;
+
+      const { error: updateError } = await supabase
+        .from("runs")
+        .update({ finished_at: new Date().toISOString(), duration_seconds: duration })
+        .eq("id", runId);
+      if (updateError) throw updateError;
+
+      const result: RunSummary = {
+        correctCount: correct,
+        wrongCount: wrong,
+        totalQuestions: totalAnswered,
+        durationSeconds: duration,
+      };
+      setSummary(result);
+      return result;
+    } catch (error) {
+      console.error("Erro ao finalizar percurso:", error);
+      toast.error("Não foi possível finalizar o percurso", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+      return null;
+    }
   };
 
   const resetProgress = async () => {
     if (!user || !classId) return;
-    await supabase
-      .from("runs")
-      .delete()
-      .eq("student_id", user.id)
-      .eq("class_id", classId)
-      .is("finished_at", null);
-    setRunId(null);
-    setTotalPoints(0);
-    setCompletedLocationIds([]);
-    setSummary(null);
-    toast.success("Progresso reposto");
+
+    try {
+      const { error } = await supabase
+        .from("runs")
+        .delete()
+        .eq("student_id", user.id)
+        .eq("class_id", classId)
+        .is("finished_at", null);
+      if (error) throw error;
+      setRunId(null);
+      setTotalPoints(0);
+      setCompletedLocationIds([]);
+      setSummary(null);
+      toast.success("Progresso reposto");
+    } catch (error) {
+      console.error("Erro ao repor progresso:", error);
+      toast.error("Não foi possível repor o progresso", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
   };
 
   const reload = async () => {

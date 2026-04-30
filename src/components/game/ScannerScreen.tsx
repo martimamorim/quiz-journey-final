@@ -13,6 +13,7 @@ export const ScannerScreen = () => {
   const stoppedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
+  const [retrying, setRetrying] = useState(false);
   const target = locations.find((l) => l.id === currentLocationId);
 
   const stopScanner = async () => {
@@ -23,9 +24,79 @@ export const ScannerScreen = () => {
       if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
         await s.stop();
       }
-      try { s.clear(); } catch { /* noop */ }
-    } catch { /* noop */ }
+      try {
+        s.clear();
+      } catch {
+        /* noop */
+      }
+    } catch {
+      /* noop */
+    }
     scannerRef.current = null;
+  };
+
+  const startScanner = async () => {
+    if (!target) {
+      setStarting(false);
+      return;
+    }
+    setError(null);
+    setStarting(true);
+
+    try {
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras || cameras.length === 0) {
+        throw new Error("Nenhuma câmara encontrada.");
+      }
+      const html5Qr = new Html5Qrcode(containerId, /* verbose */ false);
+      scannerRef.current = html5Qr;
+      const maxBoxSize = Math.min(window.innerWidth * 0.8, 320);
+
+      await html5Qr.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: maxBoxSize, height: maxBoxSize }, aspectRatio: 1.0 },
+        (decoded) => {
+          if (stoppedRef.current) return;
+          const value = decoded.trim();
+          if (target && value === target.qr_code) {
+            stoppedRef.current = true;
+            playScan();
+            vibrate(80);
+            stopScanner().finally(() => go("quiz"));
+          } else {
+            toast.error("QR errado", { description: "Este não é o código deste local." });
+          }
+        },
+        () => {
+          /* per-frame errors silenced */
+        },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Não foi possível aceder à câmara.";
+      setError(`Não foi possível aceder à câmara. ${message}`);
+      setStarting(false);
+      return;
+    }
+
+    setStarting(false);
+  };
+
+  useEffect(() => {
+    stoppedRef.current = false;
+    startScanner();
+
+    return () => {
+      stoppedRef.current = true;
+      stopScanner();
+    };
+  }, [currentLocationId, go, target]);
+
+  const retryCamera = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    await stopScanner();
+    await startScanner();
+    setRetrying(false);
   };
 
   useEffect(() => {
@@ -39,9 +110,10 @@ export const ScannerScreen = () => {
       try {
         const html5Qr = new Html5Qrcode(containerId, /* verbose */ false);
         scannerRef.current = html5Qr;
+        const maxBoxSize = Math.min(window.innerWidth * 0.8, 320);
         await html5Qr.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 240, height: 240 } },
+          { fps: 10, qrbox: { width: maxBoxSize, height: maxBoxSize }, aspectRatio: 1.0 },
           (decoded) => {
             if (stoppedRef.current) return;
             const value = decoded.trim();
@@ -115,9 +187,12 @@ export const ScannerScreen = () => {
           </div>
         )}
         {target && error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/80 gap-3">
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/80 gap-4">
             <AlertCircle className="h-8 w-8 text-destructive" />
             <p className="text-sm text-muted-foreground">{error}</p>
+            <Button onClick={retryCamera} disabled={retrying} className="rounded-full">
+              {retrying ? "A tentar..." : "Tentar novamente"}
+            </Button>
           </div>
         )}
       </div>
