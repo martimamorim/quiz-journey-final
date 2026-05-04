@@ -27,6 +27,29 @@ Aplicação de caça ao tesouro educativa construída com React, Vite, Tailwind 
    npm run dev
    ```
 
+## Demo Supabase
+- O projeto usa as tabelas:
+  - `profiles`
+  - `user_roles`
+  - `classes`
+  - `class_members`
+  - `locations`
+  - `questions`
+  - `runs`
+  - `answers`
+- Código de turma demo: `DEMO01`
+- Para criar a turma demo, use o ficheiro `supabase/seed-demo.sql` no editor SQL do Supabase.
+- O fluxo de entrada no frontend é:
+  1. o aluno põe o código de turma `DEMO01`
+  2. o app gera um email e password temporários
+  3. o aluno entra automaticamente e é ligado à turma
+
+## Como criar a turma demo
+1. Crie um utilizador professor no Supabase Auth.
+2. Copie o `user_id` desse professor.
+3. Substitua `<TEACHER_UUID>` no ficheiro `supabase/seed-demo.sql`.
+4. Execute o ficheiro no editor SQL do Supabase.
+
 ## Scripts úteis
 - `npm run dev` — iniciar o servidor de desenvolvimento
 - `npm run build` — criar build de produção
